@@ -9,7 +9,7 @@ CREATE TABLE stock_movements (
     movement_date DATETIME NOT NULL,
     user_id BIGINT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_stock_movements_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    CONSTRAINT fk_stock_movements_product FOREIGN KEY (product_id) REFERENCES product(id) ON DELETE CASCADE,
     CONSTRAINT fk_stock_movements_user FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
