@@ -63,26 +63,39 @@ public class AIAssistantDomainService implements AIAssistantService {
     public String generateProductPrice(String productName, String category, String description) {
         String prompt = String.format(
                 """
-                        Eres un experto en precios para un sistema POS peruano.
+                        Eres un experto en análisis de precios de mercado peruano.
 
-                        Sugiere un precio realista en soles peruanos para:
+                        IMPORTANTE: Debes analizar cuidadosamente y dar un precio VARIABLE basado en el producto específico.
 
                         Producto: %s
                         Categoría: %s
                         Descripción: %s
 
-                        Considera estos rangos según el tipo de producto:
-                        - Muebles grandes (mesas, camas, roperos): 400-1200 soles
-                        - Muebles medianos (sillas, mesas pequeñas): 80-300 soles  
-                        - Electrodomésticos: 200-800 soles
-                        - Productos pequeños/consumibles: 5-50 soles
-                        - Tecnología: 300-1500 soles
+                        RANGOS DE REFERENCIA (analiza el producto y elige dentro del rango apropiado):
+                        - Sofás, salas, camas grandes: S/ 800-2500
+                        - Mesas de comedor, escritorios: S/ 300-900
+                        - Sillas, taburetes: S/ 60-250
+                        - Electrodomésticos grandes (refrigeradoras, lavadoras): S/ 800-2500
+                        - Electrodomésticos medianos (microondas, licuadoras): S/ 150-500
+                        - Artículos pequeños, accesorios: S/ 15-80
+                        - Laptops, computadoras: S/ 1200-4500
+                        - Celulares, tablets: S/ 400-2500
+                        - Herramientas: S/ 50-400
+                        - Decoración, cuadros: S/ 30-200
 
-                        Responde SOLO con el número del precio (ej: 450.00), sin texto adicional ni símbolo de moneda.
+                        INSTRUCCIONES:
+                        1. Lee el nombre del producto y su descripción
+                        2. Identifica el tipo de producto específico
+                        3. Elige un precio REALISTA dentro del rango
+                        4. Considera calidad mencionada en la descripción
+                        5. NUNCA des el mismo precio para productos diferentes
+
+                        Responde SOLO con el número decimal (ejemplo: 459.00 o 1250.00 o 85.50)
+                        NO incluyas texto, símbolos de moneda ni explicaciones.
                         """,
                 productName,
                 category != null ? category : "No especificada",
-                description != null ? description : "Sin descripción");
+                description != null && !description.isEmpty() ? description : "Sin descripción");
 
         try {
             log.info("Generando precio para producto: {}", productName);
@@ -91,13 +104,28 @@ public class AIAssistantDomainService implements AIAssistantService {
                     .call()
                     .content();
 
-            // Extraer solo el número del response
-            String cleanResponse = response.trim().replaceAll("[^0-9.]", "");
-            return cleanResponse;
+            String cleanResponse = response.trim()
+                    .replaceAll("[^0-9.]", "")
+                    .replaceAll("\\.{2,}", ".");
+            
+            if (cleanResponse.isEmpty() || cleanResponse.equals(".")) {
+                log.warn("Respuesta inválida de IA: '{}', usando precio por defecto", response);
+                return "50.00";
+            }
+            
+            try {
+                double price = Double.parseDouble(cleanResponse);
+                if (price < 1.0) price = 50.00;
+                if (price > 10000.0) price = 1000.00;
+                return String.format("%.2f", price);
+            } catch (NumberFormatException nfe) {
+                log.error("No se pudo parsear precio: {}", cleanResponse);
+                return "50.00";
+            }
 
         } catch (Exception e) {
             log.error("Error al generar precio con IA: {}", e.getMessage());
-            return "50.00"; // Precio por defecto en caso de error
+            return "50.00";
         }
     }
 
@@ -107,6 +135,8 @@ public class AIAssistantDomainService implements AIAssistantService {
                 """
                         Eres un analista de ventas experto en estrategias de descuentos.
 
+                        IMPORTANTE: Debes sugerir SIEMPRE un descuento real, nunca 0%%.
+
                         Analiza la siguiente situación y sugiere un descuento estratégico:
 
                         Producto: %s
@@ -114,17 +144,24 @@ public class AIAssistantDomainService implements AIAssistantService {
                         Promedio de ventas mensuales: %.1f unidades
                         Stock actual: %d unidades
 
-                        Proporciona:
-                        1. Porcentaje de descuento recomendado (entre 0%% y 30%%)
-                        2. Justificación breve (máximo 80 palabras)
-                        3. Objetivo esperado (ej: "Acelerar rotación", "Liquidar stock")
+                        REGLAS OBLIGATORIAS:
+                        - El descuento DEBE estar entre 5%% y 30%% (NUNCA 0%%)
+                        - Stock alto (>50) o ventas bajas (<10): descuento 20-30%%
+                        - Stock medio (20-50): descuento 10-20%%
+                        - Stock bajo (<20) o ventas altas (>20): descuento 5-10%%
+                        - Sin ventas (0): descuento 25-30%%
 
-                        Formato de respuesta:
-                        DESCUENTO: [X]%%
-                        JUSTIFICACIÓN: [texto]
-                        OBJETIVO: [texto]
+                        Formato de respuesta EXACTO:
+                        DESCUENTO: [número]%%
+                        JUSTIFICACIÓN: [texto breve]
+                        OBJETIVO: [texto breve]
 
-                        Responde en español y sé conciso.
+                        Ejemplo:
+                        DESCUENTO: 15%%
+                        JUSTIFICACIÓN: Stock moderado requiere impulso para mejorar rotación
+                        OBJETIVO: Aumentar ventas en 30%%
+
+                        Responde SOLO con el formato indicado, nada más.
                         """,
                 product.getName(),
                 product.getPrice(),
