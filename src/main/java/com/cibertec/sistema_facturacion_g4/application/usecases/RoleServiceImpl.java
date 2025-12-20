@@ -32,12 +32,11 @@ public class RoleServiceImpl implements RoleService {
     
     @Override
     public Map<String, Object> initializeDefaultRoles() {
-        String[] defaultRoles = {"ADMIN", "VENDEDOR", "CAJERO", "GERENTE"};
+        String[] defaultRoles = {"ADMIN", "CAJERO", "GERENTE"};
         String[] descriptions = {
             "Administrador del sistema",
-            "Vendedor con acceso a ventas",
-            "Cajero con acceso limitado",
-            "Gerente con acceso a reportes"
+            "Cajero con acceso al punto de venta",
+            "Gerente con acceso a reportes y configuración"
         };
         
         int created = 0;
@@ -57,9 +56,57 @@ public class RoleServiceImpl implements RoleService {
         
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);
-        result.put("message", "Roles inicializados");
+        result.put("message", "Roles inicializados (sin permisos asignados)");
         result.put("created", created);
+        result.put("warning", "Los permisos deben asignarse manualmente desde el frontend");
         
         return result;
+    }
+
+    @Override
+    public void activateRole(Long id) {
+        Role role = roleRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Rol no encontrado con id: " + id));
+        
+        if (isSystemRole(role.getName())) {
+            throw new RuntimeException("No se puede activar/desactivar roles del sistema");
+        }
+        
+        role.setActive(true);
+        roleRepository.save(role);
+    }
+
+    @Override
+    public void deactivateRole(Long id) {
+        Role role = roleRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Rol no encontrado con id: " + id));
+        
+        // Validar que no sea un rol del sistema
+        if (isSystemRole(role.getName())) {
+            throw new RuntimeException("No se puede activar/desactivar roles del sistema");
+        }
+        
+        role.setActive(false);
+        roleRepository.save(role);
+    }
+
+    @Override
+    public void deleteRole(Long id) {
+        if (!roleRepository.existsById(id)) {
+            throw new RuntimeException("Rol no encontrado con id: " + id);
+        }
+        
+        Role role = roleRepository.findById(id).get();
+        
+        // Validar que no sea un rol del sistema
+        if (isSystemRole(role.getName())) {
+            throw new RuntimeException("No se puede eliminar roles del sistema");
+        }
+        
+        roleRepository.deleteById(id);
+    }
+    
+    private boolean isSystemRole(String roleName) {
+        return "ADMIN".equals(roleName) || "GERENTE".equals(roleName) || "CAJERO".equals(roleName);
     }
 }

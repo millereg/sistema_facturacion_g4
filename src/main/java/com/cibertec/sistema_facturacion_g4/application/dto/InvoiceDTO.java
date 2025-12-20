@@ -29,10 +29,19 @@ public class InvoiceDTO {
     private String discountCurrency;
     private BigDecimal totalAmount;
     private String totalCurrency;
+    private BigDecimal paidAmount;
+    private BigDecimal balanceDue;
     private String paymentMethod;
     private String notes;
     private Long companyId;
     private Boolean active;
+    private Boolean sentToSunat;
+    
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime sunatSentAt;
+    
+    private String sunatResponseCode;
+    private String sunatHash;
     
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;

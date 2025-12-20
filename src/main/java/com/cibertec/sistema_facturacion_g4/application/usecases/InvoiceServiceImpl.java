@@ -143,9 +143,28 @@ public class InvoiceServiceImpl implements InvoiceService {
         invoice.setSeries(series);
         
         invoice.setType(invoiceType);
-        invoice.setStatus(Invoice.InvoiceStatus.ISSUED);
+        // Las boletas se emiten directamente (no van a SUNAT), las facturas empiezan como borrador
+        if (invoiceType == Invoice.InvoiceType.BOLETA) {
+            invoice.setStatus(Invoice.InvoiceStatus.ISSUED);
+            invoice.setSentToSunat(false); // Las boletas no se envían a SUNAT en este sistema
+        } else {
+            invoice.setStatus(Invoice.InvoiceStatus.DRAFT);
+            invoice.setSentToSunat(false);
+        }
         invoice.setIssueDate(LocalDateTime.now());
         invoice.setCreatedAt(LocalDateTime.now());
+        
+        // Calcular fecha de vencimiento (30 días por defecto)
+        SystemConfigurationDTO expiryDaysConfig = configurationService.getConfigByKey("INVOICE_EXPIRY_DAYS");
+        int expiryDays = 30; // valor por defecto
+        if (expiryDaysConfig != null && expiryDaysConfig.getValue() != null) {
+            try {
+                expiryDays = Integer.parseInt(expiryDaysConfig.getValue());
+            } catch (NumberFormatException e) {
+                log.warn("Valor inválido para INVOICE_EXPIRY_DAYS, usando 30 días por defecto");
+            }
+        }
+        invoice.setDueDate(LocalDateTime.now().plusDays(expiryDays));
         
         if (customerDTO != null && customerDTO.getId() != null) {
             invoice.setCustomerId(customerDTO.getId());
@@ -360,6 +379,23 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     @Override
+    @Transactional
+    public boolean markAsSentToSunat(Long id, String responseCode, String hash) {
+        Long companyId = TenantUtils.getCurrentCompanyId();
+        Invoice invoice = invoiceRepository.findByIdAndCompanyId(id, companyId)
+                .orElseThrow(() -> new EntityNotFoundException("Factura no encontrada"));
+        
+        invoice.setSentToSunat(true);
+        invoice.setSunatSentAt(LocalDateTime.now());
+        invoice.setSunatResponseCode(responseCode);
+        invoice.setSunatHash(hash);
+        invoice.setStatus(Invoice.InvoiceStatus.ISSUED);
+        
+        invoiceRepository.save(invoice);
+        return true;
+    }
+
+    @Override
     public InvoicePrintDTO getInvoiceForPrint(Long id) {
         Long companyId = TenantUtils.getCurrentCompanyId();
         Invoice invoice = invoiceRepository.findByIdAndCompanyId(id, companyId)
@@ -460,6 +496,13 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .userName(getEmployeeName(invoice.getUserId()))
                 .notes(invoice.getNotes())
                 .qrCode(null).hash(null).build();
+        
+        List<Payment> payments = paymentRepository.findByInvoiceIdAndCompanyId(id, companyId);
+        BigDecimal paidAmount = payments.stream()
+                .map(Payment::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal balanceDue = total.subtract(paidAmount);
+        
         return InvoicePrintDTO.builder()
                 .company(companyInfo)
                 .document(documentInfo)
@@ -467,6 +510,8 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .details(detailsInfo)
                 .totals(totalsInfo)
                 .additional(additionalInfo)
+                .paidAmount(paidAmount)
+                .balanceDue(balanceDue)
                 .build();
     }
     

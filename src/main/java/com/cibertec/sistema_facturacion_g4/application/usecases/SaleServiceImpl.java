@@ -129,7 +129,12 @@ public class SaleServiceImpl implements SaleService {
 
         invoice.setNumber(invoiceNumber);
         invoice.setSeries(series);
-        invoice.setStatus(Invoice.InvoiceStatus.ISSUED);
+        // Las boletas se emiten directamente, las facturas empiezan como borrador
+        if (invoiceType == Invoice.InvoiceType.BOLETA) {
+            invoice.setStatus(Invoice.InvoiceStatus.ISSUED);
+        } else {
+            invoice.setStatus(Invoice.InvoiceStatus.DRAFT);
+        }
         invoice.setType(invoiceType);
         invoice.setIssueDate(LocalDateTime.now());
         invoice.setCreatedAt(LocalDateTime.now());

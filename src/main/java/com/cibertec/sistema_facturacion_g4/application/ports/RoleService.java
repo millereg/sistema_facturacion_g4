@@ -11,4 +11,10 @@ public interface RoleService {
     Role createRole(Role role);
 
     Map<String, Object> initializeDefaultRoles();
+
+    void activateRole(Long id);
+
+    void deactivateRole(Long id);
+
+    void deleteRole(Long id);
 }

@@ -38,4 +38,22 @@ public class RoleController {
         Map<String, Object> result = roleService.initializeDefaultRoles();
         return ResponseEntity.ok(result);
     }
+
+    @PutMapping("/{id}/activate")
+    public ResponseEntity<Void> activateRole(@PathVariable Long id) {
+        roleService.activateRole(id);
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/{id}/deactivate")
+    public ResponseEntity<Void> deactivateRole(@PathVariable Long id) {
+        roleService.deactivateRole(id);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteRole(@PathVariable Long id) {
+        roleService.deleteRole(id);
+        return ResponseEntity.ok().build();
+    }
 }

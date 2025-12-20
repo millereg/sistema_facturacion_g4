@@ -29,7 +29,8 @@ public class PaymentDomainServiceImpl implements PaymentDomainService {
 
     @Override
     public boolean validatePaymentMethod(String method) {
-        return "EFECTIVO".equalsIgnoreCase(method) || "TARJETA".equalsIgnoreCase(method)
-                || "TRANSFERENCIA".equalsIgnoreCase(method);
+        return "CASH".equalsIgnoreCase(method) || "CARD".equalsIgnoreCase(method)
+                || "CREDIT_CARD".equalsIgnoreCase(method) || "DEBIT_CARD".equalsIgnoreCase(method)
+                || "TRANSFER".equalsIgnoreCase(method);
     }
 }

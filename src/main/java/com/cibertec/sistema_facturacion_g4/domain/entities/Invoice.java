@@ -85,6 +85,18 @@ public class Invoice {
     @Column(name = "company_id", nullable = false)
     private Long companyId;
 
+    @Column(name = "sent_to_sunat")
+    private Boolean sentToSunat = false;
+
+    @Column(name = "sunat_sent_at")
+    private LocalDateTime sunatSentAt;
+
+    @Column(name = "sunat_response_code")
+    private String sunatResponseCode;
+
+    @Column(name = "sunat_hash")
+    private String sunatHash;
+
     private Boolean active;
 
     @CreationTimestamp

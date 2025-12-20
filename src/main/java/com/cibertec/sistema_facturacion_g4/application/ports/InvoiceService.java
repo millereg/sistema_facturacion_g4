@@ -23,5 +23,7 @@ public interface InvoiceService {
 
     boolean resendInvoice(Long id);
 
+    boolean markAsSentToSunat(Long id, String responseCode, String hash);
+
     InvoicePrintDTO getInvoiceForPrint(Long id);
 }

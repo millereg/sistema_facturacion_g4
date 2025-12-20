@@ -45,6 +45,7 @@ CREATE TABLE users (
 CREATE TABLE categories (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
+    image_url VARCHAR(500),
     company_id BIGINT NOT NULL,
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -72,6 +73,7 @@ CREATE TABLE product (
     price DECIMAL(10,2),
     currency VARCHAR(10) DEFAULT 'PEN',
     stock INT DEFAULT 0,
+    image_url VARCHAR(500),
     category_id BIGINT,
     supplier_id BIGINT,
     company_id BIGINT NOT NULL,
@@ -128,6 +130,10 @@ CREATE TABLE invoices (
     payment_method VARCHAR(50),
     notes TEXT,
     company_id BIGINT NOT NULL,
+    sent_to_sunat BOOLEAN DEFAULT FALSE,
+    sunat_sent_at TIMESTAMP,
+    sunat_response_code VARCHAR(50),
+    sunat_hash VARCHAR(255),
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -174,8 +180,50 @@ CREATE TABLE document_series (
     CONSTRAINT fk_series_company FOREIGN KEY (company_id) REFERENCES company(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Tabla de módulos del sistema
+CREATE TABLE modules (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    icon VARCHAR(50),
+    route VARCHAR(255),
+    parent_id BIGINT,
+    display_order INT DEFAULT 0,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_module_parent FOREIGN KEY (parent_id) REFERENCES modules(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabla de permisos
+CREATE TABLE permissions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    module_id BIGINT NOT NULL,
+    action VARCHAR(20) NOT NULL COMMENT 'VIEW, CREATE, EDIT, DELETE',
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_permission_module FOREIGN KEY (module_id) REFERENCES modules(id),
+    INDEX idx_permission_code (code),
+    INDEX idx_permission_module (module_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabla relacional: roles y permisos
+CREATE TABLE role_permissions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    role_name VARCHAR(50) NOT NULL,
+    permission_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_role_perm_role FOREIGN KEY (role_name) REFERENCES roles(name) ON DELETE CASCADE,
+    CONSTRAINT fk_role_perm_permission FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_role_permission (role_name, permission_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 INSERT INTO roles (name, description, active) VALUES
 ('ADMIN', 'Administrador del sistema', TRUE),
 ('GERENTE', 'Gerente general', TRUE),
-('VENDEDOR', 'Vendedor', TRUE),
 ('CAJERO', 'Cajero', TRUE);

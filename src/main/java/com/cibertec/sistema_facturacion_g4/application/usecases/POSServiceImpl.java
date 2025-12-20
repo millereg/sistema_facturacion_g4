@@ -104,11 +104,17 @@ public class POSServiceImpl implements POSService {
         String defaultCurrency = currencyConfig != null ? currencyConfig.getValue() : "PEN";
         
         InvoiceDTO invoice = new InvoiceDTO();
-        invoice.setType(saleRequest.getInvoiceType() != null ? saleRequest.getInvoiceType() : "SALE");
-        invoice.setStatus("ISSUED");
+        String invoiceType = saleRequest.getInvoiceType() != null ? saleRequest.getInvoiceType() : "SALE";
+        invoice.setType(invoiceType);
+        // Las boletas se emiten directamente, las facturas empiezan como borrador
+        if ("BOLETA".equalsIgnoreCase(invoiceType)) {
+            invoice.setStatus("ISSUED");
+        } else {
+            invoice.setStatus("DRAFT");
+        }
         invoice.setCustomerName(customer.getFirstName());
         invoice.setUserId(userId);
-        invoice.setPaymentMethod(saleRequest.getPaymentMethod() != null ? saleRequest.getPaymentMethod() : "EFECTIVO");
+        invoice.setPaymentMethod(saleRequest.getPaymentMethod() != null ? saleRequest.getPaymentMethod() : "CASH");
         invoice.setNotes(saleRequest.getNotes());
         invoice.setSubtotal(subtotal);
         invoice.setSubtotalCurrency(defaultCurrency);

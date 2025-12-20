@@ -21,6 +21,8 @@ public class InvoicePrintDTO {
     private List<InvoiceDetailInfo> details;
     private TotalsInfo totals;
     private AdditionalInfo additional;
+    private BigDecimal paidAmount;
+    private BigDecimal balanceDue;
     
     @Data
     @Builder

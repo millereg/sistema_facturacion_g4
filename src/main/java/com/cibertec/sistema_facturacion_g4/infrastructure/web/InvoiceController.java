@@ -125,6 +125,11 @@ public class InvoiceController {
                 invoice.getSeries(),
                 invoice.getNumber(),
                 xml);
+        
+        if (response.isSuccess()) {
+            invoiceService.markAsSentToSunat(id, response.getCodigoRespuesta(), response.getHashSunat());
+        }
+        
         Map<String, Object> result = new HashMap<>();
         result.put("success", response.isSuccess());
         result.put("message", response.getDescripcionRespuesta());

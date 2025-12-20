@@ -21,6 +21,9 @@ public class Category {
     @Column(name = "name", nullable = false)
     private String name;
 
+    @Column(name = "image_url")
+    private String imageUrl;
+
     @Column(name = "company_id", nullable = false)
     private Long companyId;
 

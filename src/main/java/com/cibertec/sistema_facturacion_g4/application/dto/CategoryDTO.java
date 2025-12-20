@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 public class CategoryDTO {
     private Long id;
     private String name;
+    private String imageUrl;
     private Long companyId;
     private Boolean active;
     

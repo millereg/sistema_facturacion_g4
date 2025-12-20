@@ -7,10 +7,12 @@ import com.cibertec.sistema_facturacion_g4.application.mapper.CompanyMapper;
 import com.cibertec.sistema_facturacion_g4.domain.repositories.CompanyRepository;
 import com.cibertec.sistema_facturacion_g4.shared.utils.ValidationUtils;
 import com.cibertec.sistema_facturacion_g4.shared.exceptions.BusinessException;
+import com.cibertec.sistema_facturacion_g4.infrastructure.security.SecurityUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Collections;
 
 @Service
 public class CompanyServiceImpl implements CompanyService {
@@ -51,9 +53,21 @@ public class CompanyServiceImpl implements CompanyService {
     }
 
     @Override
-
     public List<CompanyDTO> findAll() {
-        return companyRepository.findAll().stream().map(companyMapper::toDTO).toList();
+        String currentRole = SecurityUtils.getCurrentUserRole();
+        Long currentCompanyId = SecurityUtils.getCurrentCompanyId();
+        
+        if ("ADMIN".equals(currentRole)) {
+            return companyRepository.findAll().stream().map(companyMapper::toDTO).toList();
+        }
+        
+        if (currentCompanyId != null) {
+            return companyRepository.findById(currentCompanyId)
+                    .map(company -> Collections.singletonList(companyMapper.toDTO(company)))
+                    .orElse(Collections.emptyList());
+        }
+        
+        return Collections.emptyList();
     }
 
     @Override
