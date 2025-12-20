@@ -314,7 +314,21 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
         
         return invoices.stream()
-                .filter(invoice -> invoice.getStatus() == Invoice.InvoiceStatus.ISSUED)
+                .filter(invoice -> {
+                    if (invoice.getStatus() == Invoice.InvoiceStatus.PAID || 
+                        invoice.getStatus() == Invoice.InvoiceStatus.CANCELLED ||
+                        invoice.getStatus() == Invoice.InvoiceStatus.DRAFT) {
+                        return false;
+                    }
+                    
+                    List<Payment> payments = paymentRepository.findByInvoiceIdAndCompanyId(invoice.getId(), companyId);
+                    BigDecimal totalPaid = payments.stream()
+                            .map(Payment::getAmount)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    
+                    BigDecimal pending = invoice.getTotalAmount().subtract(totalPaid);
+                    return pending.compareTo(BigDecimal.ZERO) > 0;
+                })
                 .map(invoiceMapper::toDTO)
                 .collect(java.util.stream.Collectors.toList());
     }

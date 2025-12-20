@@ -287,9 +287,18 @@ INSERT INTO modules (code, name, description, icon, route, parent_id, display_or
 ('SETTINGS', 'Configuración', 'Configuración general', 'ti-settings-2', '/settings/general', 7, 4);
 
 -- Insertar permisos para cada módulo
--- Dashboard
+-- Dashboard - Cada card es un permiso individual
 INSERT INTO permissions (code, name, description, module_id, action) VALUES
-('DASHBOARD_VIEW', 'Ver Dashboard', 'Acceso al panel principal', 1, 'VIEW');
+('DASHBOARD_SALES_TODAY', 'Ventas del Día', 'Ver ventas del día actual', 1, 'VIEW'),
+('DASHBOARD_SALES_MONTH', 'Ventas del Mes', 'Ver ventas del mes', 1, 'VIEW'),
+('DASHBOARD_CUSTOMERS_TOTAL', 'Total Clientes', 'Ver cantidad total de clientes', 1, 'VIEW'),
+('DASHBOARD_PRODUCTS_STOCK', 'Productos en Stock', 'Ver cantidad de productos en stock', 1, 'VIEW'),
+('DASHBOARD_INVOICES_MONTH', 'Facturas del Mes', 'Ver facturas del mes', 1, 'VIEW'),
+('DASHBOARD_PENDING_PAYMENTS', 'Pagos Pendientes', 'Ver pagos pendientes', 1, 'VIEW'),
+('DASHBOARD_ACTIVE_CUSTOMERS', 'Clientes Activos', 'Ver clientes activos', 1, 'VIEW'),
+('DASHBOARD_LOW_STOCK', 'Productos Stock Bajo', 'Ver productos con stock bajo', 1, 'VIEW'),
+('DASHBOARD_SALES_CHART', 'Gráfico de Ventas', 'Ver gráfico de ventas de últimos 30 días', 1, 'VIEW'),
+('DASHBOARD_ALERTS', 'Alertas del Sistema', 'Ver alertas de stock bajo y facturas vencidas', 1, 'VIEW');
 
 -- POS
 INSERT INTO permissions (code, name, description, module_id, action) VALUES
@@ -386,7 +395,9 @@ SELECT 'ADMIN', id FROM permissions WHERE active = TRUE;
 INSERT INTO role_permissions (role_name, permission_id)
 SELECT 'GERENTE', id FROM permissions 
 WHERE code IN (
-    'DASHBOARD_VIEW',
+    'DASHBOARD_SALES_TODAY', 'DASHBOARD_SALES_MONTH', 'DASHBOARD_CUSTOMERS_TOTAL', 'DASHBOARD_PRODUCTS_STOCK',
+    'DASHBOARD_INVOICES_MONTH', 'DASHBOARD_PENDING_PAYMENTS', 'DASHBOARD_ACTIVE_CUSTOMERS', 'DASHBOARD_LOW_STOCK',
+    'DASHBOARD_SALES_CHART', 'DASHBOARD_ALERTS',
     'POS_VIEW', 'POS_CREATE',
     'INVOICES_VIEW', 'INVOICES_CREATE', 'INVOICES_EDIT', 'INVOICES_DELETE',
     'PAYMENTS_VIEW', 'PAYMENTS_CREATE', 'PAYMENTS_EDIT', 'PAYMENTS_DELETE',
@@ -405,7 +416,7 @@ WHERE code IN (
 INSERT INTO role_permissions (role_name, permission_id)
 SELECT 'CAJERO', id FROM permissions 
 WHERE code IN (
-    'DASHBOARD_VIEW',
+    'DASHBOARD_SALES_TODAY', 'DASHBOARD_SALES_MONTH', 'DASHBOARD_PENDING_PAYMENTS', 'DASHBOARD_INVOICES_MONTH',
     'POS_VIEW', 'POS_CREATE',
     'INVOICES_VIEW', 'INVOICES_CREATE',
     'PAYMENTS_VIEW', 'PAYMENTS_CREATE',

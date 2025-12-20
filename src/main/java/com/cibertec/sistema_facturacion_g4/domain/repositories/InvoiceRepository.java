@@ -32,6 +32,15 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
                      @Param("endDate") LocalDateTime endDate);
 
        @Query("SELECT i FROM Invoice i WHERE i.companyId = :companyId " +
+                     "AND i.userId = :userId " +
+                     "AND i.issueDate BETWEEN :startDate AND :endDate " +
+                     "ORDER BY i.issueDate DESC")
+       List<Invoice> findByCompanyIdAndUserIdAndDateRange(@Param("companyId") Long companyId,
+                     @Param("userId") Long userId,
+                     @Param("startDate") LocalDateTime startDate,
+                     @Param("endDate") LocalDateTime endDate);
+
+       @Query("SELECT i FROM Invoice i WHERE i.companyId = :companyId " +
                      "AND i.customerId = :customerId ORDER BY i.issueDate DESC")
        List<Invoice> findByCompanyIdAndCustomerId(@Param("companyId") Long companyId,
                      @Param("customerId") Long customerId);

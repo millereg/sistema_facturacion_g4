@@ -16,6 +16,7 @@ import com.cibertec.sistema_facturacion_g4.domain.repositories.InvoiceDetailRepo
 import com.cibertec.sistema_facturacion_g4.domain.repositories.PaymentRepository;
 import com.cibertec.sistema_facturacion_g4.domain.repositories.ProductRepository;
 import com.cibertec.sistema_facturacion_g4.domain.repositories.SupplierRepository;
+import com.cibertec.sistema_facturacion_g4.infrastructure.security.SecurityUtils;
 import com.cibertec.sistema_facturacion_g4.shared.utils.TenantUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -110,13 +111,22 @@ public class ReportServiceImpl implements ReportService {
         @Override
         public DashboardDTO getDashboard() {
                 Long companyId = TenantUtils.getCurrentCompanyId();
+                Long userId = SecurityUtils.getCurrentUserId();
+                String userRole = SecurityUtils.getCurrentUserRole();
+                boolean isAdminOrManager = "ADMIN".equals(userRole) || "GERENTE".equals(userRole);
 
                 Company company = companyRepository.findById(companyId)
                                 .orElseThrow(() -> new RuntimeException("Empresa no encontrada"));
+                
                 LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0);
                 LocalDateTime todayEnd = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59);
-                List<Invoice> invoicesToday = invoiceRepository.findByCompanyIdAndDateRange(
-                                companyId, todayStart, todayEnd);
+                
+                List<Invoice> invoicesToday;
+                if (isAdminOrManager) {
+                        invoicesToday = invoiceRepository.findByCompanyIdAndDateRange(companyId, todayStart, todayEnd);
+                } else {
+                        invoicesToday = invoiceRepository.findByCompanyIdAndUserIdAndDateRange(companyId, userId, todayStart, todayEnd);
+                }
 
                 BigDecimal salesToday = BigDecimal.ZERO;
                 for (Invoice invoice : invoicesToday) {
@@ -124,11 +134,16 @@ public class ReportServiceImpl implements ReportService {
                                 salesToday = salesToday.add(invoice.getTotalAmount());
                         }
                 }
-                LocalDateTime monthStart = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0)
-                                .withSecond(0);
+                
+                LocalDateTime monthStart = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
                 LocalDateTime monthEnd = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59);
-                List<Invoice> invoicesMonth = invoiceRepository.findByCompanyIdAndDateRange(
-                                companyId, monthStart, monthEnd);
+                
+                List<Invoice> invoicesMonth;
+                if (isAdminOrManager) {
+                        invoicesMonth = invoiceRepository.findByCompanyIdAndDateRange(companyId, monthStart, monthEnd);
+                } else {
+                        invoicesMonth = invoiceRepository.findByCompanyIdAndUserIdAndDateRange(companyId, userId, monthStart, monthEnd);
+                }
 
                 BigDecimal salesThisMonth = BigDecimal.ZERO;
                 for (Invoice invoice : invoicesMonth) {
@@ -136,11 +151,39 @@ public class ReportServiceImpl implements ReportService {
                                 salesThisMonth = salesThisMonth.add(invoice.getTotalAmount());
                         }
                 }
+                
                 List<Product> products = productRepository.findByCompanyId(companyId);
                 List<Product> lowStockProducts = productRepository.findLowStockProductsByCompanyId(companyId);
                 List<Customer> customers = customerRepository.findByCompanyId(companyId);
                 List<Customer> activeCustomers = customerRepository.findByCompanyIdAndActiveTrue(companyId);
+                
                 BigDecimal totalPending = BigDecimal.ZERO;
+                List<Invoice> pendingInvoices;
+                if (isAdminOrManager) {
+                        List<Invoice> issued = invoiceRepository.findByCompanyIdAndStatus(companyId, Invoice.InvoiceStatus.ISSUED);
+                        List<Invoice> partial = invoiceRepository.findByCompanyIdAndStatus(companyId, Invoice.InvoiceStatus.PARTIALLY_PAID);
+                        pendingInvoices = new java.util.ArrayList<>();
+                        pendingInvoices.addAll(issued);
+                        pendingInvoices.addAll(partial);
+                } else {
+                        pendingInvoices = invoiceRepository.findByCompanyIdAndUserId(companyId, userId)
+                                .stream()
+                                .filter(i -> i.getStatus() == Invoice.InvoiceStatus.ISSUED || 
+                                           i.getStatus() == Invoice.InvoiceStatus.PARTIALLY_PAID)
+                                .toList();
+                }
+
+                for (Invoice invoice : pendingInvoices) {
+                        List<Payment> payments = paymentRepository.findByInvoiceIdAndCompanyId(invoice.getId(), companyId);
+                        BigDecimal totalPaid = payments.stream()
+                                .map(Payment::getAmount)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                        
+                        BigDecimal pending = invoice.getTotalAmount().subtract(totalPaid);
+                        if (pending.compareTo(BigDecimal.ZERO) > 0) {
+                                totalPending = totalPending.add(pending);
+                        }
+                }
 
                 return DashboardDTO.builder()
                                 .companyId(companyId)
@@ -362,7 +405,13 @@ public class ReportServiceImpl implements ReportService {
                 LocalDateTime endDate = LocalDateTime.now();
                 LocalDateTime startDate = endDate.minusDays(days - 1);
 
-                List<Invoice> invoices = invoiceRepository.findByCompanyIdAndDateRange(companyId, startDate, endDate);
+                List<Invoice> invoices;
+                if (isAdminOrManager()) {
+                        invoices = invoiceRepository.findByCompanyIdAndDateRange(companyId, startDate, endDate);
+                } else {
+                        Long userId = SecurityUtils.getCurrentUserId();
+                        invoices = invoiceRepository.findByCompanyIdAndUserIdAndDateRange(companyId, userId, startDate, endDate);
+                }
 
                 java.util.Map<String, BigDecimal> dailySales = new java.util.LinkedHashMap<>();
                 for (int i = 0; i < days; i++) {
@@ -395,19 +444,295 @@ public class ReportServiceImpl implements ReportService {
 
                 List<Product> lowStockProducts = productRepository.findLowStockProductsByCompanyId(companyId);
 
-                List<Invoice> overdueInvoices = invoiceRepository.findByCompanyId(companyId)
-                                .stream()
-                                .filter(i -> i.getDueDate() != null &&
-                                                i.getDueDate().isBefore(LocalDateTime.now()) &&
-                                                i.getStatus() != Invoice.InvoiceStatus.PAID)
-                                .toList();
+                List<Invoice> overdueInvoices;
+                if (isAdminOrManager()) {
+                        overdueInvoices = invoiceRepository.findByCompanyId(companyId)
+                                        .stream()
+                                        .filter(i -> {
+                                                if (i.getDueDate() == null || !i.getDueDate().isBefore(LocalDateTime.now())) {
+                                                        return false;
+                                                }
+                                                if (i.getStatus() == Invoice.InvoiceStatus.PAID || 
+                                                    i.getStatus() == Invoice.InvoiceStatus.CANCELLED ||
+                                                    i.getStatus() == Invoice.InvoiceStatus.DRAFT) {
+                                                        return false;
+                                                }
+                                                
+                                                List<Payment> payments = paymentRepository.findByInvoiceIdAndCompanyId(i.getId(), companyId);
+                                                BigDecimal totalPaid = payments.stream()
+                                                        .map(Payment::getAmount)
+                                                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                                                
+                                                BigDecimal pending = i.getTotalAmount().subtract(totalPaid);
+                                                return pending.compareTo(BigDecimal.ZERO) > 0;
+                                        })
+                                        .toList();
+                } else {
+                        Long userId = SecurityUtils.getCurrentUserId();
+                        overdueInvoices = invoiceRepository.findByCompanyIdAndUserId(companyId, userId)
+                                        .stream()
+                                        .filter(i -> {
+                                                if (i.getDueDate() == null || !i.getDueDate().isBefore(LocalDateTime.now())) {
+                                                        return false;
+                                                }
+                                                if (i.getStatus() == Invoice.InvoiceStatus.PAID || 
+                                                    i.getStatus() == Invoice.InvoiceStatus.CANCELLED ||
+                                                    i.getStatus() == Invoice.InvoiceStatus.DRAFT) {
+                                                        return false;
+                                                }
+                                                
+                                                List<Payment> payments = paymentRepository.findByInvoiceIdAndCompanyId(i.getId(), companyId);
+                                                BigDecimal totalPaid = payments.stream()
+                                                        .map(Payment::getAmount)
+                                                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                                                
+                                                BigDecimal pending = i.getTotalAmount().subtract(totalPaid);
+                                                return pending.compareTo(BigDecimal.ZERO) > 0;
+                                        })
+                                        .toList();
+                }
 
-                long newCustomersToday = customerRepository.findAll()
+                long newCustomersToday = customerRepository.findByCompanyId(companyId)
                                 .stream()
                                 .filter(c -> c.getCreatedAt() != null &&
                                                 c.getCreatedAt().toLocalDate()
-                                                                .equals(LocalDateTime.now().toLocalDate()))
+                                                                .equals(LocalDateTime.now().toLocalDate()) &&
+                                                !c.getIsGeneric())
                                 .count();
+
+                java.util.Map<String, Object> alerts = new java.util.HashMap<>();
+                alerts.put("lowStockCount", lowStockProducts.size());
+                alerts.put("overdueInvoices", overdueInvoices.size());
+                alerts.put("newCustomersToday", (int) newCustomersToday);
+                alerts.put("pendingTasks", 0);
+
+                return alerts;
+        }
+
+        private boolean isAdminOrManager() {
+                String role = SecurityUtils.getCurrentUserRole();
+                return "ADMIN".equals(role) || "GERENTE".equals(role);
+        }
+
+        public BigDecimal getSalesToday() {
+                Long companyId = TenantUtils.getCurrentCompanyId();
+                LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0);
+                LocalDateTime todayEnd = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59);
+
+                List<Invoice> invoices;
+                if (isAdminOrManager()) {
+                        invoices = invoiceRepository.findByCompanyIdAndDateRange(companyId, todayStart, todayEnd);
+                } else {
+                        Long userId = SecurityUtils.getCurrentUserId();
+                        invoices = invoiceRepository.findByCompanyIdAndUserIdAndDateRange(companyId, userId, todayStart, todayEnd);
+                }
+
+                BigDecimal total = BigDecimal.ZERO;
+                for (Invoice invoice : invoices) {
+                        if (invoice.getTotalAmount() != null) {
+                                total = total.add(invoice.getTotalAmount());
+                        }
+                }
+                return total;
+        }
+
+        public BigDecimal getSalesMonth() {
+                Long companyId = TenantUtils.getCurrentCompanyId();
+                LocalDateTime monthStart = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
+                LocalDateTime monthEnd = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59);
+
+                List<Invoice> invoices;
+                if (isAdminOrManager()) {
+                        invoices = invoiceRepository.findByCompanyIdAndDateRange(companyId, monthStart, monthEnd);
+                } else {
+                        Long userId = SecurityUtils.getCurrentUserId();
+                        invoices = invoiceRepository.findByCompanyIdAndUserIdAndDateRange(companyId, userId, monthStart, monthEnd);
+                }
+
+                BigDecimal total = BigDecimal.ZERO;
+                for (Invoice invoice : invoices) {
+                        if (invoice.getTotalAmount() != null) {
+                                total = total.add(invoice.getTotalAmount());
+                        }
+                }
+                return total;
+        }
+
+        public int getCustomersTotal() {
+                Long companyId = TenantUtils.getCurrentCompanyId();
+                
+                if (isAdminOrManager()) {
+                        return customerRepository.findByCompanyId(companyId).size();
+                } else {
+                        return customerRepository.findByCompanyId(companyId).size();
+                }
+        }
+
+        public int getProductsStock() {
+                Long companyId = TenantUtils.getCurrentCompanyId();
+                return productRepository.findByCompanyId(companyId).size();
+        }
+
+        public int getInvoicesMonth() {
+                Long companyId = TenantUtils.getCurrentCompanyId();
+                LocalDateTime monthStart = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
+                LocalDateTime monthEnd = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59);
+
+                List<Invoice> invoices;
+                if (isAdminOrManager()) {
+                        invoices = invoiceRepository.findByCompanyIdAndDateRange(companyId, monthStart, monthEnd);
+                } else {
+                        Long userId = SecurityUtils.getCurrentUserId();
+                        invoices = invoiceRepository.findByCompanyIdAndUserIdAndDateRange(companyId, userId, monthStart, monthEnd);
+                }
+
+                return invoices.size();
+        }
+
+        public BigDecimal getPendingPayments() {
+                Long companyId = TenantUtils.getCurrentCompanyId();
+
+                List<Invoice> pendingInvoices;
+                if (isAdminOrManager()) {
+                        List<Invoice> issued = invoiceRepository.findByCompanyIdAndStatus(companyId, Invoice.InvoiceStatus.ISSUED);
+                        List<Invoice> partial = invoiceRepository.findByCompanyIdAndStatus(companyId, Invoice.InvoiceStatus.PARTIALLY_PAID);
+                        pendingInvoices = new java.util.ArrayList<>();
+                        pendingInvoices.addAll(issued);
+                        pendingInvoices.addAll(partial);
+                } else {
+                        Long userId = SecurityUtils.getCurrentUserId();
+                        pendingInvoices = invoiceRepository.findByCompanyIdAndUserId(companyId, userId)
+                                .stream()
+                                .filter(i -> i.getStatus() == Invoice.InvoiceStatus.ISSUED || 
+                                           i.getStatus() == Invoice.InvoiceStatus.PARTIALLY_PAID)
+                                .toList();
+                }
+
+                BigDecimal totalPending = BigDecimal.ZERO;
+                for (Invoice invoice : pendingInvoices) {
+                        List<Payment> payments = paymentRepository.findByInvoiceIdAndCompanyId(invoice.getId(), companyId);
+                        BigDecimal totalPaid = payments.stream()
+                                .map(Payment::getAmount)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                        
+                        BigDecimal pending = invoice.getTotalAmount().subtract(totalPaid);
+                        if (pending.compareTo(BigDecimal.ZERO) > 0) {
+                                totalPending = totalPending.add(pending);
+                        }
+                }
+
+                return totalPending;
+        }
+
+        public int getActiveCustomers() {
+                Long companyId = TenantUtils.getCurrentCompanyId();
+                return customerRepository.findByCompanyIdAndActiveTrue(companyId).size();
+        }
+
+        public int getLowStock() {
+                Long companyId = TenantUtils.getCurrentCompanyId();
+                return productRepository.findLowStockProductsByCompanyId(companyId).size();
+        }
+
+        public java.util.Map<String, Object> getSalesChart() {
+                Long companyId = TenantUtils.getCurrentCompanyId();
+                int days = 30;
+                LocalDateTime endDate = LocalDateTime.now();
+                LocalDateTime startDate = endDate.minusDays(days - 1);
+
+                List<Invoice> invoices;
+                if (isAdminOrManager()) {
+                        invoices = invoiceRepository.findByCompanyIdAndDateRange(companyId, startDate, endDate);
+                } else {
+                        Long userId = SecurityUtils.getCurrentUserId();
+                        invoices = invoiceRepository.findByCompanyIdAndUserIdAndDateRange(companyId, userId, startDate, endDate);
+                }
+
+                java.util.Map<String, BigDecimal> dailySales = new java.util.LinkedHashMap<>();
+                for (int i = 0; i < days; i++) {
+                        LocalDateTime date = startDate.plusDays(i);
+                        String dateKey = date.toLocalDate().toString();
+                        dailySales.put(dateKey, BigDecimal.ZERO);
+                }
+
+                for (Invoice invoice : invoices) {
+                        if (invoice.getIssueDate() != null && invoice.getTotalAmount() != null) {
+                                String dateKey = invoice.getIssueDate().toLocalDate().toString();
+                                dailySales.merge(dateKey, invoice.getTotalAmount(), BigDecimal::add);
+                        }
+                }
+
+                java.util.Map<String, Object> chartData = new java.util.HashMap<>();
+                chartData.put("labels", dailySales.keySet().toArray(new String[0]));
+                chartData.put("data", dailySales.values().stream()
+                                .map(v -> v.doubleValue())
+                                .toArray(Double[]::new));
+                chartData.put("currency", "PEN");
+                chartData.put("title", "Ventas de los últimos " + days + " días");
+
+                return chartData;
+        }
+
+        public java.util.Map<String, Object> getDashboardAlerts() {
+                Long companyId = TenantUtils.getCurrentCompanyId();
+
+                List<Product> lowStockProducts = productRepository.findLowStockProductsByCompanyId(companyId);
+
+                List<Invoice> overdueInvoices;
+                if (isAdminOrManager()) {
+                        overdueInvoices = invoiceRepository.findByCompanyId(companyId)
+                                .stream()
+                                .filter(i -> {
+                                        if (i.getDueDate() == null || !i.getDueDate().isBefore(LocalDateTime.now())) {
+                                                return false;
+                                        }
+                                        if (i.getStatus() == Invoice.InvoiceStatus.PAID || 
+                                            i.getStatus() == Invoice.InvoiceStatus.CANCELLED ||
+                                            i.getStatus() == Invoice.InvoiceStatus.DRAFT) {
+                                                return false;
+                                        }
+                                        
+                                        List<Payment> payments = paymentRepository.findByInvoiceIdAndCompanyId(i.getId(), companyId);
+                                        BigDecimal totalPaid = payments.stream()
+                                                .map(Payment::getAmount)
+                                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                                        
+                                        BigDecimal pending = i.getTotalAmount().subtract(totalPaid);
+                                        return pending.compareTo(BigDecimal.ZERO) > 0;
+                                })
+                                .toList();
+                } else {
+                        Long userId = SecurityUtils.getCurrentUserId();
+                        overdueInvoices = invoiceRepository.findByCompanyIdAndUserId(companyId, userId)
+                                .stream()
+                                .filter(i -> {
+                                        if (i.getDueDate() == null || !i.getDueDate().isBefore(LocalDateTime.now())) {
+                                                return false;
+                                        }
+                                        if (i.getStatus() == Invoice.InvoiceStatus.PAID || 
+                                            i.getStatus() == Invoice.InvoiceStatus.CANCELLED ||
+                                            i.getStatus() == Invoice.InvoiceStatus.DRAFT) {
+                                                return false;
+                                        }
+                                        
+                                        List<Payment> payments = paymentRepository.findByInvoiceIdAndCompanyId(i.getId(), companyId);
+                                        BigDecimal totalPaid = payments.stream()
+                                                .map(Payment::getAmount)
+                                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                                        
+                                        BigDecimal pending = i.getTotalAmount().subtract(totalPaid);
+                                        return pending.compareTo(BigDecimal.ZERO) > 0;
+                                })
+                                .toList();
+                }
+
+                long newCustomersToday = customerRepository.findByCompanyId(companyId)
+                        .stream()
+                        .filter(c -> c.getCreatedAt() != null &&
+                                        c.getCreatedAt().toLocalDate()
+                                                        .equals(LocalDateTime.now().toLocalDate()) &&
+                                        !c.getIsGeneric())
+                        .count();
 
                 java.util.Map<String, Object> alerts = new java.util.HashMap<>();
                 alerts.put("lowStockCount", lowStockProducts.size());
